@@ -1,0 +1,64 @@
+###############################
+#       Flutter / Dart        #
+###############################
+
+# Build
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.dart_tool/
+.pub-cache/
+.pub/
+**/ios/Pods/
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/App.framework
+**/android/app/build/
+**/android/.gradle/
+
+# VS Code / IntelliJ
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+
+# Generated
+*.lock
+*.log
+
+###############################
+#           Go                #
+###############################
+
+# Binaries
+**/*.exe
+**/*.exe~
+**/*.dll
+**/*.so
+**/*.dylib
+**/server
+**/bin/
+**/dist/
+
+# Go Build cache
+**/go-build/
+**/cover.out
+
+# Dependency stuff
+**/vendor/
+
+###############################
+#        General              #
+###############################
+
+
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.*
