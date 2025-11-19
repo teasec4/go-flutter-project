@@ -1,32 +1,44 @@
 package account
 
+import "errors"
+
 type Account interface {
-	GetBalance() float64
+	Deposit(amount int) error
+	Withdraw(amount int) error
+	GetBalance() int
 }
 
 type impl struct {
-	AccountId string
-	Name      string
-	Balance   float64
+	balance int
 }
 
-var store = map[string]Account{}
+// new acc
+func New(initialBalance int) Account {
+	return &impl{balance: initialBalance}
+}
 
-func NewAccount(accountId string, name string, balance float64) Account {
-	a := &impl{
-		AccountId: accountId,
-		Name:      name,
-		Balance:   balance,
+// Deposit implements Account.
+func (a *impl) Deposit(amount int) error {
+	if amount <= 0 {
+		return errors.New("deposit amount must be greater than 0")
 	}
-	store[accountId] = a
-	return a
+	a.balance += amount
+	return nil
 }
 
-func GetByID(accountId string) (Account, bool) {
-	a, ok := store[accountId]
-	return a, ok
+// Withdraw implements Account.
+func (a *impl) Withdraw(amount int) error {
+	if amount <= 0 {
+		return  errors.New("withdraw amount should be positive")
+	}
+	if a.balance < amount {
+		return errors.New("insufficient balance")
+	}
+	a.balance -= amount
+	return nil
 }
 
-func (a *impl) GetBalance() float64 {
-	return a.Balance
+
+func (a *impl) GetBalance() int {
+	return a.balance
 }
