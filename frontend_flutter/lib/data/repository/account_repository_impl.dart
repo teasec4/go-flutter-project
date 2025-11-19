@@ -1,0 +1,23 @@
+import 'package:frontend_flutter/data/datasource/account_remote_datasource.dart';
+import 'package:frontend_flutter/domain/model/account.dart';
+import 'package:frontend_flutter/domain/repository/account_repo.dart';
+
+class AccountRepositoryImpl implements AccountRepo{
+  // remote data source
+  AccountRemoteDatasource accountRemoteDatasource;
+  AccountRepositoryImpl({
+      required this.accountRemoteDatasource
+  });
+
+  @override
+  Future<Account> getAccountInfo(String id) async{
+    try{
+      final accountInfo = await accountRemoteDatasource.getAccountInfo(id);
+      return accountInfo;
+    } catch (e) {
+      throw Exception(
+        'Some error'
+      );
+    }
+  }
+}
