@@ -20,4 +20,14 @@ class AccountRepositoryImpl implements AccountRepo{
       );
     }
   }
+
+  @override
+  Future<Account> deposit(String id, int amount) async{
+    try{
+      final depositResponse = await accountRemoteDatasource.deposit(id, amount);
+      return depositResponse;
+    } catch (e){
+      throw Exception("Deposit error");
+    }
+  }
 }

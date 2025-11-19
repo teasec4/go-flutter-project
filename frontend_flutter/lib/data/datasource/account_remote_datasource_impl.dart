@@ -34,4 +34,33 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
       throw Exception('Failed to fetch: $e');
     }
   }
+
+  @override
+  Future<Account> deposit(String id, int amount) async{
+    try{
+      final url = Uri.parse("http://192.168.5.10:8080/deposit");
+      final response = await http.post(
+        url,
+        headers:  {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'accountId' : id,
+          'amount' : amount
+        })
+      );
+      
+      developer.log('Deposit request sent: accountId=$id, amount=$amount');
+      developer.log('Status code: ${response.statusCode}');
+      developer.log('Response body: ${response.body}');
+      if (response.statusCode == 200){
+        return Account.fromJSON(jsonDecode(response.body));
+      } else {
+        throw Exception(
+            'HTTP response failed with status ${response.statusCode}'
+        );
+      }
+
+    } catch (e){
+      throw Exception("Failed to deposit $e");
+    }
+  }
 }

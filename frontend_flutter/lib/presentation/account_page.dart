@@ -11,12 +11,22 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
-  late Future<Account> account;
+  late Future<Account> _accountFuture;
 
   @override
   void initState(){
     super.initState();
-    account = AccountRemoteDatasourceImpl().getAccountInfo(widget.accountNumber);
+    _loadAccount();
+  }
+
+  void _loadAccount() {
+    _accountFuture = AccountRemoteDatasourceImpl().getAccountInfo(widget.accountNumber);
+  }
+
+  // refresh balance
+  void _refreshBalance() {
+    _loadAccount();
+    setState(() {});
   }
   // show a modal bottom
   void _showAddTransactionModal(BuildContext context, bool isDeposit){
@@ -24,7 +34,15 @@ class _AccountPageState extends State<AccountPage> {
         context: context,
         isScrollControlled: true,
         builder: (context) => _AddTransactionSheet(
-            isDeposit: isDeposit
+            isDeposit: isDeposit,
+            onConfirm: (amount) async{
+              if(isDeposit){
+                await AccountRemoteDatasourceImpl().deposit(widget.accountNumber, amount);
+                _refreshBalance();
+              } else {
+                print("nothing");
+              }
+            }
         )
     );
   }
@@ -47,7 +65,7 @@ class _AccountPageState extends State<AccountPage> {
           child: Padding(
             padding: const EdgeInsets.all(15.0),
             child: FutureBuilder<Account>(
-              future: account,
+              future: _accountFuture,
               builder: (context, snapshot){
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
@@ -68,8 +86,8 @@ class _AccountPageState extends State<AccountPage> {
                       ],
                     ),
                     SizedBox(height: 20,),
-                    Text("Balance - ${accountData.balance}"),
-                    SizedBox(height: 20,),
+                     Text("Balance - ${accountData.balance}"),
+                     SizedBox(height: 20,),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -99,7 +117,8 @@ class _AccountPageState extends State<AccountPage> {
 // modal bottom sheet
 class _AddTransactionSheet extends StatefulWidget{
   final bool isDeposit;
-  const _AddTransactionSheet({required this.isDeposit});
+  final Function(int) onConfirm;
+  const _AddTransactionSheet({required this.isDeposit, required this.onConfirm});
 
   @override
   State<_AddTransactionSheet> createState() => _AddTransactionSheetState();
@@ -108,6 +127,7 @@ class _AddTransactionSheet extends StatefulWidget{
 
 class _AddTransactionSheetState extends State<_AddTransactionSheet>{
   late final TextEditingController _amountController;
+
 
   @override
   void initState(){
@@ -122,19 +142,35 @@ class _AddTransactionSheetState extends State<_AddTransactionSheet>{
   }
 
   // handle confirmation
-  void _handleConfirmation(bool isDeposit){
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: isDeposit ? Text("Success Deposit") : Text("Success Withdraw"),
-          backgroundColor: Colors.green.shade300,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8)
-          ),
+  void _handleConfirmation(bool isDeposit) async{
+    if (_amountController.text.isEmpty){
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Enter amount'))
+      );
+      return;
+    }
 
-        )
-    );
-    Navigator.pop(context);
-    _amountController.clear();
+    int amount = int.parse(_amountController.text);
+
+    try{
+      await widget.onConfirm(amount);
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: isDeposit ? Text("Success Deposit") : Text("Success Withdraw"),
+            backgroundColor: Colors.green.shade300,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)
+            ),
+
+          )
+      );
+      Navigator.pop(context);
+      _amountController.clear();
+    } catch (e){
+      throw Exception("Some $e");
+    }
+
+
   }
 
   @override
@@ -152,6 +188,7 @@ class _AddTransactionSheetState extends State<_AddTransactionSheet>{
           children: [
             SizedBox(height:20),
             TextField(
+              controller: _amountController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: "Amount",

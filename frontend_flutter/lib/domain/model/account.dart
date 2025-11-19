@@ -2,7 +2,7 @@
 class Account{
   final String id;
   final String? name;
-  final double balance;
+  final int balance;
 
   Account({required this.id, required this.name, required this.balance});
 
@@ -11,7 +11,7 @@ class Account{
     return Account(
         id: json['accountId'].toString(),
         name: json['name'] as String? ?? 'Unknown',
-        balance: (json['balance'] as num).toDouble(),
+        balance: json['balance'] as int,
     );
   }
 
