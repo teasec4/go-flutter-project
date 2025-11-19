@@ -10,12 +10,34 @@ build/
 .dart_tool/
 .pub-cache/
 .pub/
-**/ios/Pods/
-**/ios/Flutter/Flutter.podspec
-**/ios/Flutter/Flutter.framework
-**/ios/Flutter/App.framework
+
+# Platform builds
 **/android/app/build/
 **/android/.gradle/
+**/android/.settings/
+**/android/local.properties
+**/android/gradlew
+**/android/gradlew.bat
+**/android/gradle/
+
+**/ios/Pods/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/App.framework
+**/ios/Flutter/Generated.xcconfig
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+**/macos/Flutter/Flutter-Debug.xcconfig
+**/macos/Flutter/Flutter-Release.xcconfig
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Pods/
+
+**/windows/flutter/ephemeral/
+**/windows/runner/GeneratedPluginRegistrant.*
+
+**/linux/flutter/ephemeral/
+**/linux/runner/GeneratedPluginRegistrant.*
+
+**/web/.dart_tool/
 
 # VS Code / IntelliJ
 .idea/
