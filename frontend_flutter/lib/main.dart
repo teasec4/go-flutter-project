@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:frontend_flutter/di/service_locator.dart';
 import 'package:frontend_flutter/presentation/home_page.dart';
 
-void main() {
+void main() async{
+  WidgetsFlutterBinding.ensureInitialized();
+  setupServiceLocator();
   runApp(const MyApp());
 }
 

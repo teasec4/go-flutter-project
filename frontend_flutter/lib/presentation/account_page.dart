@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:frontend_flutter/data/datasource/account_remote_datasource_impl.dart';
+import 'package:frontend_flutter/di/service_locator.dart';
 import 'package:frontend_flutter/domain/model/account.dart';
+import 'package:frontend_flutter/domain/repository/account_repo.dart';
 
 class AccountPage extends StatefulWidget {
   final String accountNumber ;
@@ -20,7 +21,7 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   void _loadAccount() {
-    _accountFuture = AccountRemoteDatasourceImpl().getAccountInfo(widget.accountNumber);
+    _accountFuture = getIt<AccountRepo>().getAccountInfo(widget.accountNumber);
   }
 
   // refresh balance
@@ -37,12 +38,12 @@ class _AccountPageState extends State<AccountPage> {
             isDeposit: isDeposit,
             onConfirm: (amount) async{
               if(isDeposit){
-                 await AccountRemoteDatasourceImpl().deposit(widget.accountNumber, amount);
-                 _refreshBalance();
-               } else {
-                 await AccountRemoteDatasourceImpl().withdraw(widget.accountNumber, amount);
-                 _refreshBalance();
-               }
+                await getIt<AccountRepo>().deposit(widget.accountNumber, amount);
+                _refreshBalance();
+              } else {
+                await getIt<AccountRepo>().withdraw(widget.accountNumber, amount);
+                _refreshBalance();
+              }
             }
         )
     );
