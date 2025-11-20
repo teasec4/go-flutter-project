@@ -11,8 +11,7 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
   Future<Account> getAccountInfo(String id) async{
     try{
       final url = Uri.parse("http://192.168.5.10:8080/balance?id=$id");
-      developer.log('Fetching from: $url');
-
+      
       final response = await http
         .get(url)
       .timeout(Duration(seconds: 15));
@@ -22,7 +21,6 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
 
       if (response.statusCode == 200){
         final data = json.decode(response.body);
-        developer.log('Parsed JSON: $data');
         return Account.fromJSON(data);
       } else {
         throw Exception(
