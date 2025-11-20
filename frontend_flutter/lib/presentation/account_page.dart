@@ -37,11 +37,12 @@ class _AccountPageState extends State<AccountPage> {
             isDeposit: isDeposit,
             onConfirm: (amount) async{
               if(isDeposit){
-                await AccountRemoteDatasourceImpl().deposit(widget.accountNumber, amount);
-                _refreshBalance();
-              } else {
-                print("nothing");
-              }
+                 await AccountRemoteDatasourceImpl().deposit(widget.accountNumber, amount);
+                 _refreshBalance();
+               } else {
+                 await AccountRemoteDatasourceImpl().withdraw(widget.accountNumber, amount);
+                 _refreshBalance();
+               }
             }
         )
     );
@@ -92,11 +93,11 @@ class _AccountPageState extends State<AccountPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        ElevatedButton(
+                        FilledButton.tonal(
                             onPressed: () => _showAddTransactionModal(context, false),
                             child: Text("Withdraw")
                         ),
-                        ElevatedButton(
+                        FilledButton.tonal(
                             onPressed: () =>  _showAddTransactionModal(context, true),
                             child: Text("Deposit")
                         ),
@@ -197,7 +198,7 @@ class _AddTransactionSheetState extends State<_AddTransactionSheet>{
               ),
             ),
             SizedBox(height:20),
-            ElevatedButton(
+            FilledButton(
                 onPressed: () => _handleConfirmation(widget.isDeposit),
                 child: widget.isDeposit ? Text("Deposit") : Text("Withdraw"),
             ),

@@ -30,4 +30,14 @@ class AccountRepositoryImpl implements AccountRepo{
       throw Exception("Deposit error");
     }
   }
+
+  @override
+  Future<Account> withdraw(String id, int amount) async{
+    try{
+      final withdrawResponse = await accountRemoteDatasource.withdraw(id, amount);
+      return withdrawResponse;
+    } catch (e){
+      throw Exception("Withdraw error");
+    }
+  }
 }

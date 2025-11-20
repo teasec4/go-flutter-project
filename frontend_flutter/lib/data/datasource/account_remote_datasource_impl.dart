@@ -26,7 +26,7 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
         return Account.fromJSON(data);
       } else {
         throw Exception(
-          'HTTP response failed with status ${response.statusCode}'
+          '${jsonDecode(response.body)['error']}'
         );
       }
     } catch (e) {
@@ -55,12 +55,36 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
         return Account.fromJSON(jsonDecode(response.body));
       } else {
         throw Exception(
-            'HTTP response failed with status ${response.statusCode}'
+            '${jsonDecode(response.body)['error']}'
         );
       }
 
     } catch (e){
       throw Exception("Failed to deposit $e");
+    }
+  }
+
+  @override
+  Future<Account> withdraw(String id, int amount) async{
+    try{
+      final url = Uri.parse("http://192.168.5.10:8080/withdraw");
+      final response = await http.post(
+        url,
+          headers:  {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'accountId' : id,
+            'amount' : amount
+          }),
+      );
+      if (response.statusCode == 200){
+        return Account.fromJSON(jsonDecode(response.body));
+      } else {
+        throw Exception(
+          "Some json err"
+        );
+      }
+    } catch (e){
+      throw Exception("Bed req ${e}");
     }
   }
 }

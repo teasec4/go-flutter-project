@@ -108,3 +108,39 @@ func Deposit(b *bank.Bank) http.HandlerFunc{
 		})
 	}
 }
+
+// Withdraw handler
+func Withdraw(b *bank.Bank) http.HandlerFunc{
+	return func(w http.ResponseWriter, r *http.Request){
+		if r.Method != http.MethodPost{
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req withdrawRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil{
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(errorResponse{Error: "invalid request"})
+			return
+		}
+		a, ok := b.GetAccount(req.AccountId)
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(errorResponse{Error: "account not found"})
+			return
+		}
+		if err := a.Withdraw(req.Amount); err != nil{
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(errorResponse{Error: err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(withdrawResponse{
+			AccountId: req.AccountId,
+			Balance: a.GetBalance(),
+		})
+	}
+}
