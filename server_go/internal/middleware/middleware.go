@@ -1,0 +1,62 @@
+// Package middleware provides HTTP middleware functions for the API
+package middleware
+
+import (
+	"log"
+	"net/http"
+	"time"
+
+	chimiddleware "github.com/go-chi/chi/middleware"
+)
+
+// Logging is middleware that logs HTTP request details
+// Logs the timestamp, HTTP method, URI, and request duration
+// Useful for monitoring and debugging API usage
+//
+// Information logged:
+//   - [HH:MM:SS] METHOD /path
+//   - [HH:MM:SS] METHOD /path - duration (after request completes)
+func Logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Record the start time of the request
+		start := time.Now()
+		// Log request start
+		log.Printf("[%s] %s %s", start.Format("15:04:05"), r.Method, r.RequestURI)
+		// Process the request
+		next.ServeHTTP(w, r)
+		// Log request completion with duration
+		log.Printf("[%s] %s %s - %v", start.Format("15:04:05"), r.Method, r.RequestURI, time.Since(start))
+	})
+}
+
+// JSONContent is middleware that validates Content-Type header for POST/PUT requests
+// Ensures that all POST and PUT requests have "application/json" Content-Type
+// Returns 400 Bad Request if Content-Type is missing or incorrect for these methods
+//
+// This middleware:
+//   - Allows GET/DELETE requests without Content-Type validation
+//   - Enforces application/json for POST/PUT requests
+//   - Blocks requests with incorrect Content-Type on POST/PUT
+func JSONContent(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if this is a POST or PUT request (write operations)
+		if r.Method == http.MethodPost || r.Method == http.MethodPut {
+			// Verify Content-Type is application/json
+			if r.Header.Get("Content-Type") != "application/json" {
+				// Return error if Content-Type is incorrect
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error":"Content-Type must be application/json"}`))
+				return
+			}
+		}
+		// Continue to next middleware/handler
+		next.ServeHTTP(w, r)
+	})
+}
+
+// StripSlashes is chi's built-in middleware that removes trailing slashes from request paths
+// Example: /account/ -> /account
+// This ensures consistent URL handling and prevents route mismatches
+var StripSlashes = chimiddleware.StripSlashes
+

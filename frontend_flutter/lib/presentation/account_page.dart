@@ -77,78 +77,81 @@ class _AccountPageState extends State<AccountPage> {
                   AccountLoadingData() => const Center(
                       child: CircularProgressIndicator(),
                     ),
-                  AccountLoadedData(:final account) => Column(
-                      children: [
-                        // Account Info Section
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceVariant,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppColors.border,
+                  AccountLoadedData(:final account) => Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Account Info Section
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceVariant,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.border,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                // Account Number
+                                _InfoRow(
+                                  label: 'Account Number',
+                                  value: account.id,
+                                ),
+                                Divider(color: AppColors.divider, height: 24),
+                                // Balance
+                                _InfoRow(
+                                  label: 'Current Balance',
+                                  value: '\$${account.balance}',
+                                  valueStyle: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.success,
+                                      ),
+                                ),
+                                if (account.name != null &&
+                                    account.name != 'Unknown') ...[
+                                  Divider(
+                                    color: AppColors.divider,
+                                    height: 24,
+                                  ),
+                                  _InfoRow(
+                                    label: 'Account Holder',
+                                    value: account.name!,
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          child: Column(
+                          const SizedBox(height: 32),
+                          // Action Buttons
+                          Row(
                             children: [
-                              // Account Number
-                              _InfoRow(
-                                label: 'Account Number',
-                                value: account.id,
-                              ),
-                              Divider(color: AppColors.divider, height: 24),
-                              // Balance
-                              _InfoRow(
-                                label: 'Current Balance',
-                                value: '\$${account.balance}',
-                                valueStyle: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.success,
-                                    ),
-                              ),
-                              if (account.name != null &&
-                                  account.name != 'Unknown') ...[
-                                Divider(
-                                  color: AppColors.divider,
-                                  height: 24,
+                              Expanded(
+                                child: _TransactionButton(
+                                  icon: Icons.arrow_downward,
+                                  label: 'Withdraw',
+                                  onPressed: () =>
+                                      _showAddTransactionModal(context, false),
+                                  color: AppColors.danger,
                                 ),
-                                _InfoRow(
-                                  label: 'Account Holder',
-                                  value: account.name!,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _TransactionButton(
+                                  icon: Icons.arrow_upward,
+                                  label: 'Deposit',
+                                  onPressed: () =>
+                                      _showAddTransactionModal(context, true),
+                                  color: AppColors.success,
                                 ),
-                              ],
+                              ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 32),
-                        // Action Buttons
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _TransactionButton(
-                                icon: Icons.arrow_downward,
-                                label: 'Withdraw',
-                                onPressed: () =>
-                                    _showAddTransactionModal(context, false),
-                                color: AppColors.danger,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _TransactionButton(
-                                icon: Icons.arrow_upward,
-                                label: 'Deposit',
-                                onPressed: () =>
-                                    _showAddTransactionModal(context, true),
-                                color: AppColors.success,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   AccountHadError(:final message) => Center(
                       child: Column(
@@ -332,6 +335,8 @@ class _AddTransactionSheetState extends State<_AddTransactionSheet> {
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
       expand: false,
+      minChildSize: 0.4,
+      initialChildSize: 0.5,
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
