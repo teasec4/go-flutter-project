@@ -15,9 +15,8 @@ class AccountRepositoryImpl implements AccountRepo{
       final accountInfo = await accountRemoteDatasource.getAccountInfo(id);
       return accountInfo;
     } catch (e) {
-      throw Exception(
-        'Some error'
-      );
+      // Propagate the original error message from server
+      rethrow;
     }
   }
 
@@ -27,7 +26,8 @@ class AccountRepositoryImpl implements AccountRepo{
       final depositResponse = await accountRemoteDatasource.deposit(id, amount);
       return depositResponse;
     } catch (e){
-      throw Exception("Deposit error");
+      // Propagate the original error message from server
+      rethrow;
     }
   }
 
@@ -37,7 +37,8 @@ class AccountRepositoryImpl implements AccountRepo{
       final withdrawResponse = await accountRemoteDatasource.withdraw(id, amount);
       return withdrawResponse;
     } catch (e){
-      throw Exception("Withdraw error");
+      // Propagate the original error message from server
+      rethrow;
     }
   }
 }

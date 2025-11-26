@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:io';
 
 import 'package:frontend_flutter/data/datasource/account_remote_datasource.dart';
 import 'package:frontend_flutter/domain/model/account.dart';
@@ -15,7 +17,7 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
     try {
       final url = Uri.parse("$_baseUrl/login");
       developer.log('Logging in with accountId: $accountId');
-      
+
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -28,16 +30,22 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _token = data['token'] as String?;
-        
+
         if (_token == null || _token!.isEmpty) {
           throw Exception('Empty token received from server');
         }
-        
+
         developer.log('Login successful, token: $_token');
       } else {
         final errorData = jsonDecode(response.body);
         throw Exception('Login failed: ${errorData['error']}');
       }
+    } on SocketException catch(e){
+      developer.log('Network error: $e');
+      throw Exception('No internet connection');
+    } on TimeoutException catch(e){
+      developer.log('Timeout: $e');
+      throw Exception('Request timeout. Try again');
     } catch (e) {
       developer.log('Login Error: $e');
       rethrow;
@@ -70,17 +78,23 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
       developer.log('Response body: ${response.body}');
 
       if (response.statusCode == 200){
-        final data = json.decode(response.body);
-        return Account.fromJSON(data);
-      } else {
-        throw Exception(
-          '${jsonDecode(response.body)['error']}'
-        );
+         final data = jsonDecode(response.body);
+         return Account.fromJSON(data);
+       } else {
+         throw Exception(
+           '${jsonDecode(response.body)['error']}'
+         );
+       }
+      } on SocketException catch(e){
+       developer.log('Network error: $e');
+       throw Exception('No internet connection');
+      } on TimeoutException catch(e){
+       developer.log('Timeout: $e');
+       throw Exception('Request timeout. Try again');
+      } catch (e) {
+       developer.log('Error: $e');
+       throw Exception('Failed to fetch: $e');
       }
-    } catch (e) {
-      developer.log('Error: $e');
-      throw Exception('Failed to fetch: $e');
-    }
   }
 
   @override
@@ -102,14 +116,20 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
       if (response.statusCode == 200){
         return Account.fromJSON(jsonDecode(response.body));
       } else {
-        final errorData = jsonDecode(response.body);
-        throw Exception('Deposit failed: ${errorData['error']}');
-      }
+         final errorData = jsonDecode(response.body);
+         throw Exception('Deposit failed: ${errorData['error']}');
+       }
 
-    } catch (e){
-      developer.log('Deposit Error: $e');
-      rethrow;
-    }
+      } on SocketException catch(e){
+       developer.log('Network error: $e');
+       throw Exception('No internet connection');
+      } on TimeoutException catch(e){
+       developer.log('Timeout: $e');
+       throw Exception('Request timeout. Try again');
+      } catch (e){
+       developer.log('Deposit Error: $e');
+       rethrow;
+      }
   }
 
   @override
@@ -135,9 +155,15 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource{
         final errorData = jsonDecode(response.body);
         throw Exception('Withdraw failed: ${errorData['error']}');
       }
-    } catch (e){
+      } on SocketException catch(e){
+      developer.log('Network error: $e');
+      throw Exception('No internet connection');
+      } on TimeoutException catch(e){
+      developer.log('Timeout: $e');
+      throw Exception('Request timeout. Try again');
+      } catch (e){
       developer.log('Withdraw Error: $e');
       rethrow;
-    }
-  }
-}
+      }
+      }
+      }

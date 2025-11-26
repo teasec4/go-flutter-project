@@ -16,7 +16,7 @@ class AccountCubit extends Cubit<AccountState> {
       final account = await accountRepo.getAccountInfo(id);
       emit(AccountLoadedData(account));
     } catch (e) {
-      emit(AccountHadError(e.toString()));
+      emit(AccountHadError(_extractErrorMessage(e)));
     }
   }
 
@@ -26,7 +26,7 @@ class AccountCubit extends Cubit<AccountState> {
       final account = await accountRepo.deposit(id, amount);
       emit(AccountLoadedData(account));
     } catch (e) {
-      emit(AccountHadError(e.toString()));
+      emit(AccountHadError(_extractErrorMessage(e)));
     }
   }
 
@@ -36,7 +36,19 @@ class AccountCubit extends Cubit<AccountState> {
       final account = await accountRepo.withdraw(id, amount);
       emit(AccountLoadedData(account));
     } catch (e) {
-      emit(AccountHadError(e.toString()));
+      emit(AccountHadError(_extractErrorMessage(e)));
     }
+  }
+
+  String _extractErrorMessage(dynamic error) {
+    if (error is Exception) {
+      // Extract message from "Exception: message" format
+      final str = error.toString();
+      if (str.startsWith('Exception: ')) {
+        return str.substring(11); // Remove "Exception: " prefix
+      }
+      return str;
+    }
+    return error.toString();
   }
 }

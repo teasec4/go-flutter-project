@@ -398,7 +398,9 @@ class _AddTransactionSheetState extends State<_AddTransactionSheet> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _handleConfirmation,
+                      onPressed: () {
+                        _handleConfirmation();
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.isDeposit
                             ? AppColors.success

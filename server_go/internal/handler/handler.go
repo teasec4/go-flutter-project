@@ -3,21 +3,10 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
-	"strings"
-	"sync"
-	"time"
 	"server/internal/bank"
-
+	"server/internal/middleware"
 	"github.com/go-chi/chi"
-	"github.com/google/uuid"
-)
-
-// tokenStore holds valid tokens in memory (token -> accountId mapping)
-var (
-	tokenStore = &sync.Map{}
 )
 
 // Routes registers all account-related API routes
@@ -32,71 +21,13 @@ func Routes(r *chi.Mux, b *bank.Bank) {
 	
 	r.Route("/account", func(router chi.Router) {
 		// Apply auth middleware to all /account routes
-		router.Use(authMiddleware)
+		router.Use(middleware.Auth)
 		// Apply logging middleware to all /account routes
-		router.Use(loggingMiddleware)
-		
+		router.Use(middleware.Logging)
 		router.Get("/", getBalance(b))
 		router.Post("/deposit", deposit(b))
 		router.Post("/withdraw", withdraw(b))
 	})
-}
-
-// ============= Request Types =============
-
-// depositRequest represents the incoming JSON payload for deposit operations
-// Fields:
-//   - AccountId: the account identifier to deposit funds into
-//   - Amount: the amount of money to deposit (must be positive)
-type depositRequest struct {
-	AccountId string `json:"accountId"`
-	Amount    int    `json:"amount"`
-}
-
-// withdrawRequest represents the incoming JSON payload for withdrawal operations
-// Fields:
-//   - AccountId: the account identifier to withdraw funds from
-//   - Amount: the amount of money to withdraw (must be positive and not exceed balance)
-type withdrawRequest struct {
-	AccountId string `json:"accountId"`
-	Amount    int    `json:"amount"`
-}
-
-// ============= Response Types =============
-
-// balanceResponse represents the JSON response when checking account balance
-type balanceResponse struct {
-	AccountId string `json:"accountId"`
-	Balance   int    `json:"balance"`
-}
-
-// depositResponse represents the JSON response after a successful deposit
-// Returns the updated balance of the account
-type depositResponse struct {
-	AccountId string `json:"accountId"`
-	Balance   int    `json:"balance"`
-}
-
-// withdrawResponse represents the JSON response after a successful withdrawal
-// Returns the updated balance of the account
-type withdrawResponse struct {
-	AccountId string `json:"accountId"`
-	Balance   int    `json:"balance"`
-}
-
-// errorResponse represents a generic error response sent when operations fail
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
-// loginRequest represents the incoming JSON payload for login
-type loginRequest struct {
-	AccountId string `json:"accountId"`
-}
-
-// loginResponse represents the JSON response after successful login
-type loginResponse struct {
-	Token string `json:"token"`
 }
 
 // ============= Handlers =============
@@ -235,28 +166,6 @@ func sendError(w http.ResponseWriter, statusCode int, message string) {
 	json.NewEncoder(w).Encode(errorResponse{Error: message})
 }
 
-// ============= Middleware =============
-
-// loggingMiddleware logs all incoming HTTP requests and their processing time
-// Format: [HH:MM:SS] METHOD /path - duration
-// Example: [14:32:15] POST /account/deposit - 125.4ms
-// This middleware is applied to all /account routes to track API usage
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Record the start time of the request
-		start := time.Now()
-		
-		// Log request start with timestamp, HTTP method, and URI
-		log.Printf("[%s] %s %s", start.Format("15:04:05"), r.Method, r.RequestURI)
-		
-		// Call the next handler/middleware
-		next.ServeHTTP(w, r)
-		
-		// Log request completion with duration
-		duration := time.Since(start)
-		log.Printf("[%s] %s %s - %v", start.Format("15:04:05"), r.Method, r.RequestURI, duration)
-	})
-}
 
 // login handles POST /login
 // Authenticates user and returns a token
@@ -285,7 +194,7 @@ func login(b *bank.Bank) http.HandlerFunc {
 		}
 
 		// Generate and return token
-		token := generateToken(req.AccountId)
+		token := middleware.GenerateToken(req.AccountId)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -293,49 +202,3 @@ func login(b *bank.Bank) http.HandlerFunc {
 	}
 }
 
-// generateToken creates a token from accountId and stores it in memory
-// Format: "accountId:uuid"
-// Token is stored in tokenStore for validation
-func generateToken(accountId string) string {
-	tokenUUID := uuid.New().String()
-	token := fmt.Sprintf("%s:%s", accountId, tokenUUID)
-	
-	// Store token in memory (token -> accountId)
-	tokenStore.Store(token, accountId)
-	
-	log.Printf("Generated token for account %s: %s", accountId, token)
-	return token
-}
-
-// authMiddleware verifies that requests contain a valid authorization token
-// Token is expected in "Authorization: Bearer <token>" header
-// Token must be previously issued by /login endpoint
-func authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get authorization header
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			sendError(w, http.StatusUnauthorized, "missing authorization header")
-			return
-		}
-
-		// Extract token from "Bearer <token>" format
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			sendError(w, http.StatusUnauthorized, "invalid authorization format")
-			return
-		}
-
-		token := parts[1]
-		
-		// Check if token exists in tokenStore
-		accountId, found := tokenStore.Load(token)
-		if !found {
-			sendError(w, http.StatusUnauthorized, "invalid or expired token")
-			return
-		}
-
-		log.Printf("Authorized request for account: %s", accountId)
-		next.ServeHTTP(w, r)
-	})
-}
