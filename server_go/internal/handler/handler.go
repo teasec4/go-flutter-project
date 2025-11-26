@@ -3,12 +3,21 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 	"server/internal/bank"
 
 	"github.com/go-chi/chi"
+	"github.com/google/uuid"
+)
+
+// tokenStore holds valid tokens in memory (token -> accountId mapping)
+var (
+	tokenStore = &sync.Map{}
 )
 
 // Routes registers all account-related API routes
@@ -18,9 +27,13 @@ func Routes(r *chi.Mux, b *bank.Bank) {
 	// Import logging middleware
 	// The middleware is applied at the route group level to log all account operations
 	
+	// Login route (no auth required)
+	r.Post("/login", login(b))
+	
 	r.Route("/account", func(router chi.Router) {
+		// Apply auth middleware to all /account routes
+		router.Use(authMiddleware)
 		// Apply logging middleware to all /account routes
-		// This will log: timestamp, HTTP method, URI, and request duration
 		router.Use(loggingMiddleware)
 		
 		router.Get("/", getBalance(b))
@@ -74,6 +87,16 @@ type withdrawResponse struct {
 // errorResponse represents a generic error response sent when operations fail
 type errorResponse struct {
 	Error string `json:"error"`
+}
+
+// loginRequest represents the incoming JSON payload for login
+type loginRequest struct {
+	AccountId string `json:"accountId"`
+}
+
+// loginResponse represents the JSON response after successful login
+type loginResponse struct {
+	Token string `json:"token"`
 }
 
 // ============= Handlers =============
@@ -232,5 +255,87 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		// Log request completion with duration
 		duration := time.Since(start)
 		log.Printf("[%s] %s %s - %v", start.Format("15:04:05"), r.Method, r.RequestURI, duration)
+	})
+}
+
+// login handles POST /login
+// Authenticates user and returns a token
+//
+// Request body (JSON):
+//   - accountId: string, the account ID to login
+//
+// Responses:
+//   - 200 OK: with auth token
+//   - 400 Bad Request: invalid request body
+//   - 404 Not Found: account does not exist
+func login(b *bank.Bank) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Parse incoming JSON request body
+		var req loginRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			sendError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		// Check if account exists
+		_, ok := b.GetAccount(req.AccountId)
+		if !ok {
+			sendError(w, http.StatusNotFound, "account not found")
+			return
+		}
+
+		// Generate and return token
+		token := generateToken(req.AccountId)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(loginResponse{Token: token})
+	}
+}
+
+// generateToken creates a token from accountId and stores it in memory
+// Format: "accountId:uuid"
+// Token is stored in tokenStore for validation
+func generateToken(accountId string) string {
+	tokenUUID := uuid.New().String()
+	token := fmt.Sprintf("%s:%s", accountId, tokenUUID)
+	
+	// Store token in memory (token -> accountId)
+	tokenStore.Store(token, accountId)
+	
+	log.Printf("Generated token for account %s: %s", accountId, token)
+	return token
+}
+
+// authMiddleware verifies that requests contain a valid authorization token
+// Token is expected in "Authorization: Bearer <token>" header
+// Token must be previously issued by /login endpoint
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			sendError(w, http.StatusUnauthorized, "missing authorization header")
+			return
+		}
+
+		// Extract token from "Bearer <token>" format
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			sendError(w, http.StatusUnauthorized, "invalid authorization format")
+			return
+		}
+
+		token := parts[1]
+		
+		// Check if token exists in tokenStore
+		accountId, found := tokenStore.Load(token)
+		if !found {
+			sendError(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+
+		log.Printf("Authorized request for account: %s", accountId)
+		next.ServeHTTP(w, r)
 	})
 }
