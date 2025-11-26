@@ -45,5 +45,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>App needs local network access</string>
+	<key>NSBonjour Services</key>
+	<array>
+		<string>_http._tcp</string>
+	</array>
 </dict>
 </plist>
