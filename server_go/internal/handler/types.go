@@ -23,6 +23,7 @@ type withdrawRequest struct {
 
 // loginRequest represents the incoming JSON payload for login
 type loginRequest struct {
+	UserId    string `json:"userId"`
 	AccountId string `json:"accountId"`
 }
 

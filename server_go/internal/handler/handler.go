@@ -3,30 +3,26 @@ package handler
 
 import (
 	"encoding/json"
+	"gorm.io/gorm"
 	"net/http"
-	"server/internal/bank"
 	"server/internal/middleware"
+	"server/internal/storage"
 	"github.com/go-chi/chi"
 )
 
 // Routes registers all account-related API routes
-// Routes: GET /account, POST /account/deposit, POST /account/withdraw
-// Applies logging middleware to track all account operations
-func Routes(r *chi.Mux, b *bank.Bank) {
-	// Import logging middleware
-	// The middleware is applied at the route group level to log all account operations
-	
+func Routes(r *chi.Mux, accountRepo *storage.AccountRepository, userRepo *storage.UserRepository, tokenRepo *storage.TokenRepository) {
 	// Login route (no auth required)
-	r.Post("/login", login(b))
-	
+	r.Post("/login", login(accountRepo, tokenRepo))
+
 	r.Route("/account", func(router chi.Router) {
 		// Apply auth middleware to all /account routes
-		router.Use(middleware.Auth)
+		router.Use(middleware.AuthWithTokenRepo(tokenRepo))
 		// Apply logging middleware to all /account routes
 		router.Use(middleware.Logging)
-		router.Get("/", getBalance(b))
-		router.Post("/deposit", deposit(b))
-		router.Post("/withdraw", withdraw(b))
+		router.Get("/", getBalance(accountRepo))
+		router.Post("/deposit", deposit(accountRepo))
+		router.Post("/withdraw", withdraw(accountRepo))
 	})
 }
 
@@ -34,15 +30,7 @@ func Routes(r *chi.Mux, b *bank.Bank) {
 
 // getBalance handles GET /account?id={accountId}
 // Retrieves the current balance of a specified account
-//
-// Query Parameters:
-//   - id: required, the account identifier
-//
-// Responses:
-//   - 200 OK: with balanceResponse containing account balance
-//   - 400 Bad Request: if id parameter is missing
-//   - 404 Not Found: if account does not exist
-func getBalance(b *bank.Bank) http.HandlerFunc {
+func getBalance(accountRepo *storage.AccountRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Extract account ID from query parameters
 		accountID := r.URL.Query().Get("id")
@@ -51,10 +39,14 @@ func getBalance(b *bank.Bank) http.HandlerFunc {
 			return
 		}
 
-		// Retrieve account from bank using account ID
-		a, ok := b.GetAccount(accountID)
-		if !ok {
-			sendError(w, http.StatusNotFound, "account not found")
+		// Retrieve account from database
+		account, err := accountRepo.GetAccountByID(accountID)
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				sendError(w, http.StatusNotFound, "account not found")
+				return
+			}
+			sendError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -63,41 +55,42 @@ func getBalance(b *bank.Bank) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(balanceResponse{
 			AccountId: accountID,
-			Balance:   a.GetBalance(),
+			Balance:   (*account).GetBalance(),
 		})
 	}
 }
 
 // deposit handles POST /account/deposit
 // Deposits funds into an account
-//
-// Request body (JSON):
-//   - accountId: string, the target account
-//   - amount: integer, positive amount to deposit
-//
-// Responses:
-//   - 200 OK: with updated account balance
-//   - 400 Bad Request: invalid request body or invalid amount (must be positive)
-//   - 404 Not Found: account does not exist
-func deposit(b *bank.Bank) http.HandlerFunc {
+func deposit(accountRepo *storage.AccountRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Parse incoming JSON request body into depositRequest struct
+		// Parse incoming JSON request body
 		var req depositRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			sendError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
-		// Lookup account in bank to verify it exists
-		a, ok := b.GetAccount(req.AccountId)
-		if !ok {
-			sendError(w, http.StatusNotFound, "account not found")
+		// Lookup account in database
+		account, err := accountRepo.GetAccountByID(req.AccountId)
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				sendError(w, http.StatusNotFound, "account not found")
+				return
+			}
+			sendError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		// Execute deposit operation on the account (validates amount)
-		if err := a.Deposit(req.Amount); err != nil {
+		// Execute deposit operation (validates amount)
+		if err := account.Deposit(req.Amount); err != nil {
 			sendError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// Save updated balance to database
+		if err := accountRepo.UpdateBalance(req.AccountId, account.GetBalance()); err != nil {
+			sendError(w, http.StatusInternalServerError, "failed to update balance")
 			return
 		}
 
@@ -106,42 +99,42 @@ func deposit(b *bank.Bank) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(depositResponse{
 			AccountId: req.AccountId,
-			Balance:   a.GetBalance(),
+			Balance:   account.GetBalance(),
 		})
 	}
 }
 
 // withdraw handles POST /account/withdraw
 // Withdraws funds from an account
-//
-// Request body (JSON):
-//   - accountId: string, the source account
-//   - amount: integer, positive amount to withdraw
-//
-// Responses:
-//   - 200 OK: with updated account balance
-//   - 400 Bad Request: invalid request, invalid amount, or insufficient balance
-//   - 404 Not Found: account does not exist
-func withdraw(b *bank.Bank) http.HandlerFunc {
+func withdraw(accountRepo *storage.AccountRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Parse incoming JSON request body into withdrawRequest struct
+		// Parse incoming JSON request body
 		var req withdrawRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			sendError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
-		// Lookup account in bank to verify it exists
-		a, ok := b.GetAccount(req.AccountId)
-		if !ok {
-			sendError(w, http.StatusNotFound, "account not found")
+		// Lookup account in database
+		account, err := accountRepo.GetAccountByID(req.AccountId)
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				sendError(w, http.StatusNotFound, "account not found")
+				return
+			}
+			sendError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		// Execute withdrawal operation on the account
-		// Validates: amount must be positive and not exceed balance
-		if err := a.Withdraw(req.Amount); err != nil {
+		// Execute withdrawal operation
+		if err := account.Withdraw(req.Amount); err != nil {
 			sendError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// Save updated balance to database
+		if err := accountRepo.UpdateBalance(req.AccountId, account.GetBalance()); err != nil {
+			sendError(w, http.StatusInternalServerError, "failed to update balance")
 			return
 		}
 
@@ -150,34 +143,21 @@ func withdraw(b *bank.Bank) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(withdrawResponse{
 			AccountId: req.AccountId,
-			Balance:   a.GetBalance(),
+			Balance:   account.GetBalance(),
 		})
 	}
 }
 
 // sendError is a helper function to send error responses in JSON format
-// Parameters:
-//   - w: ResponseWriter to write the response to
-//   - statusCode: HTTP status code (e.g., 400, 404, 500)
-//   - message: error message to include in response
 func sendError(w http.ResponseWriter, statusCode int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(errorResponse{Error: message})
 }
 
-
 // login handles POST /login
 // Authenticates user and returns a token
-//
-// Request body (JSON):
-//   - accountId: string, the account ID to login
-//
-// Responses:
-//   - 200 OK: with auth token
-//   - 400 Bad Request: invalid request body
-//   - 404 Not Found: account does not exist
-func login(b *bank.Bank) http.HandlerFunc {
+func login(accountRepo *storage.AccountRepository, tokenRepo *storage.TokenRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse incoming JSON request body
 		var req loginRequest
@@ -187,18 +167,25 @@ func login(b *bank.Bank) http.HandlerFunc {
 		}
 
 		// Check if account exists
-		_, ok := b.GetAccount(req.AccountId)
-		if !ok {
-			sendError(w, http.StatusNotFound, "account not found")
+		_, err := accountRepo.GetAccountByID(req.AccountId)
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				sendError(w, http.StatusNotFound, "account not found")
+				return
+			}
+			sendError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		// Generate and return token
-		token := middleware.GenerateToken(req.AccountId)
+		// Generate and save token to database
+		token, err := middleware.GenerateToken(req.UserId, req.AccountId, tokenRepo)
+		if err != nil {
+			sendError(w, http.StatusInternalServerError, "failed to generate token")
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(loginResponse{Token: token})
 	}
 }
-
