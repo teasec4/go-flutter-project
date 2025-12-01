@@ -26,3 +26,13 @@ func (r *UserRepository) GetUserByID(id string) (*models.User, error) {
 	}
 	return &user, nil
 }
+
+// GetUserWithAccount получает пользователя вместе с его аккаунтом
+func (r *UserRepository) GetUserWithAccount(id string) (*models.User, error) {
+	var user models.User
+	err := r.db.Preload("Account").First(&user, "id = ?", id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

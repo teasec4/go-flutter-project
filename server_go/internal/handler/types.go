@@ -24,7 +24,13 @@ type withdrawRequest struct {
 // loginRequest represents the incoming JSON payload for login
 type loginRequest struct {
 	UserId    string `json:"userId"`
-	AccountId string `json:"accountId"`
+	Password  string `json:"password"`
+}
+
+// registerRequest represents the incoming JSON payload for user registration
+type registerRequest struct {
+	UserId   string `json:"userId"`
+	Password string `json:"password"`
 }
 
 // ============= Response Types =============
@@ -57,4 +63,10 @@ type errorResponse struct {
 // loginResponse represents the JSON response after successful login
 type loginResponse struct {
 	Token string `json:"token"`
+}
+
+// registerResponse represents the JSON response after successful registration
+type registerResponse struct {
+	UserId   string `json:"userId"`
+	Message  string `json:"message"`
 }

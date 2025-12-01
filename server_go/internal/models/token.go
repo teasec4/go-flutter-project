@@ -5,7 +5,6 @@ import "time"
 type Token struct {
 	ID        string    `gorm:"primaryKey"`
 	UserID    string    // прямая связь на User
-	AccountID string
 	Token     string    `gorm:"unique;not null"`
 	ExpiresAt time.Time
 	CreatedAt time.Time

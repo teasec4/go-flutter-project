@@ -25,20 +25,7 @@ func Logging(next http.Handler) http.Handler {
 	})
 }
 
-// JSONContent is middleware that validates Content-Type header for POST/PUT requests
-func JSONContent(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost || r.Method == http.MethodPut {
-			if r.Header.Get("Content-Type") != "application/json" {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(`{"error":"Content-Type must be application/json"}`))
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
+
 
 // StripSlashes is chi's built-in middleware that removes trailing slashes from request paths
 var StripSlashes = chimiddleware.StripSlashes
@@ -46,14 +33,13 @@ var StripSlashes = chimiddleware.StripSlashes
 // GenerateToken creates a token and saves it to database
 // Token format: "accountId:uuid"
 // Default expiration: 24 hours
-func GenerateToken(userID, accountID string, tokenRepo *storage.TokenRepository) (string, error) {
+func GenerateToken(userID string, tokenRepo *storage.TokenRepository) (string, error) {
 	tokenUUID := uuid.New().String()
-	tokenValue := fmt.Sprintf("%s:%s", accountID, tokenUUID)
+	tokenValue := fmt.Sprintf("%s:%s", userID, tokenUUID)
 	
 	token := &models.Token{
 		ID:        uuid.New().String(),
 		UserID:    userID,
-		AccountID: accountID,
 		Token:     tokenValue,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
@@ -63,12 +49,13 @@ func GenerateToken(userID, accountID string, tokenRepo *storage.TokenRepository)
 		return "", err
 	}
 	
-	log.Printf("Generated token for user %s (account %s)", userID, accountID)
+	log.Printf("Generated token for user %s", userID)
 	return tokenValue, nil
 }
 
 // Auth verifies that requests contain a valid authorization token from database
 // Token is expected in "Authorization: Bearer <token>" header
+// Middleware also fetches and validates the associated account
 func AuthWithTokenRepo(tokenRepo *storage.TokenRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +94,10 @@ func AuthWithTokenRepo(tokenRepo *storage.TokenRepository) func(http.Handler) ht
 				return
 			}
 
-			log.Printf("Authorized request for account: %s", token.AccountID)
+			log.Printf("Authorized request for user: %s", token.UserID)
+			
+			// Add UserID to request header for handlers to use
+			r.Header.Set("X-User-ID", token.UserID)
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -1,6 +1,11 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
 
 type Account struct {
 	ID        string    `gorm:"primaryKey"`
@@ -8,6 +13,14 @@ type Account struct {
 	Balance   int
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// BeforeCreate автоматически генерирует ID для нового Account
+func (a *Account) BeforeCreate(tx *gorm.DB) error {
+	if a.ID == "" {
+		a.ID = uuid.New().String()
+	}
+	return nil
 }
 
 func (a *Account) Deposit(amount int) error {
