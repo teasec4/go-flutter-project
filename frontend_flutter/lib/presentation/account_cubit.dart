@@ -13,9 +13,12 @@ class AccountCubit extends Cubit<AccountState> {
   Future<void> getAccountInfo(String id) async {
     try {
       emit(AccountLoadingData());
+      print('AccountCubit.getAccountInfo() called');
       final account = await accountRepo.getAccountInfo(id);
+      print('AccountCubit.getAccountInfo() success');
       emit(AccountLoadedData(account));
     } catch (e) {
+      print('AccountCubit.getAccountInfo() error: $e');
       emit(AccountHadError(_extractErrorMessage(e)));
     }
   }

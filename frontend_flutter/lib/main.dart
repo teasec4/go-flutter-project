@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:frontend_flutter/core/colors.dart';
+import 'package:frontend_flutter/data/service/token_service.dart';
 import 'package:frontend_flutter/di/service_locator.dart';
+import 'package:frontend_flutter/presentation/auth_cubit.dart';
+import 'package:frontend_flutter/presentation/auth_state.dart';
 import 'package:frontend_flutter/presentation/home_page.dart';
+import 'package:frontend_flutter/presentation/login_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await TokenService.initialize();
   setupServiceLocator();
   runApp(const MyApp());
 }
@@ -88,10 +94,32 @@ class MyApp extends StatelessWidget {
           color: AppColors.divider,
         ),
       ),
-      home: const HomePage(),
-      routes: {
-        '/home': (context) => const HomePage(),
-      },
+      home: BlocProvider(
+        create: (_) => getIt<AuthCubit>()..checkAuth(),
+        child: BlocListener<AuthCubit, AuthState>(
+          listener: (context, state) {
+            if (state is AuthError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+          child: BlocBuilder<AuthCubit, AuthState>(
+            builder: (context, state) {
+              return switch (state) {
+                AuthInitial() || AuthLoading() => const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  ),
+                AuthAuthenticated() => const HomePage(),
+                _ => const LoginPage(), // AuthError и AuthUnauthenticated
+              };
+            },
+          ),
+        ),
+      ),
     );
   }
 }
