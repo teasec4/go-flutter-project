@@ -51,9 +51,14 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>App needs local network access</string>
-	<key>NSBonjour Services</key>
-	<array>
-		<string>_http._tcp</string>
-	</array>
+	<key>NSPrivateLocalNetworkUsageDescription</key>
+	<string>App needs private local network access</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

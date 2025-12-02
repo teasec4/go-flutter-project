@@ -40,7 +40,7 @@ func main() {
 
 	// Configure the HTTP server
 	server := &http.Server{
-		Addr:           ":8080",
+		Addr:           "192.168.5.10:8080", // "0.0.0.0:8080", // IPv4 IPv6
 		Handler:        r,
 		ReadTimeout:    15 * time.Second,
 		WriteTimeout:   15 * time.Second,

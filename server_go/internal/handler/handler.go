@@ -13,6 +13,9 @@ import (
 
 // Routes registers all account-related API routes
 func Routes(r *chi.Mux, accountRepo *storage.AccountRepository, userRepo *storage.UserRepository, tokenRepo *storage.TokenRepository) {
+	// Apply CORS middleware globally
+	r.Use(middleware.CORS)
+	
 	// Login route (no auth required)
 	r.Post("/login", login(userRepo, tokenRepo))
 	r.Post("/register", register(userRepo, accountRepo))
