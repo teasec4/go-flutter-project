@@ -37,14 +37,19 @@ class _AccountPageState extends State<AccountPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _AddTransactionSheet(
+      builder: (context) => _TransactionListeningWrapper(
         isDeposit: isDeposit,
         accountNumber: widget.accountNumber,
         onConfirm: (amount) async {
+          print('onConfirm called with amount=$amount');
           if (isDeposit) {
+            print('Calling deposit...');
             await _accountCubit.deposit(widget.accountNumber, amount);
+            print('Deposit completed');
           } else {
+            print('Calling withdraw...');
             await _accountCubit.withdraw(widget.accountNumber, amount);
+            print('Withdraw completed');
           }
         },
       ),
@@ -267,6 +272,57 @@ class _AddTransactionSheet extends StatefulWidget {
   State<_AddTransactionSheet> createState() => _AddTransactionSheetState();
 }
 
+class _TransactionListeningWrapper extends StatelessWidget {
+  final bool isDeposit;
+  final String accountNumber;
+  final Function(int) onConfirm;
+
+  const _TransactionListeningWrapper({
+    required this.isDeposit,
+    required this.accountNumber,
+    required this.onConfirm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<AccountCubit, AccountState>(
+      listener: (context, state) {
+        if (state is AccountLoadedData) {
+          print('Transaction successful, showing toast');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isDeposit ? "Successfully deposited" : "Successfully withdrew",
+              ),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+          // Close modal after showing toast
+          Navigator.pop(context);
+        } else if (state is AccountHadError) {
+          print('Transaction error: ${state.message}');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${state.message}'),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
+      },
+      child: _AddTransactionSheet(
+        isDeposit: isDeposit,
+        accountNumber: accountNumber,
+        onConfirm: onConfirm,
+      ),
+    );
+  }
+}
+
 class _AddTransactionSheetState extends State<_AddTransactionSheet> {
   late final TextEditingController _amountController;
 
@@ -283,7 +339,9 @@ class _AddTransactionSheetState extends State<_AddTransactionSheet> {
   }
 
   void _handleConfirmation() async {
+    print('_handleConfirmation called');
     if (_amountController.text.isEmpty) {
+      print('Amount is empty');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter an amount')),
       );
@@ -299,30 +357,18 @@ class _AddTransactionSheetState extends State<_AddTransactionSheet> {
         return;
       }
 
+      print('Starting ${widget.isDeposit ? 'deposit' : 'withdraw'} for amount: $amount');
       await widget.onConfirm(amount);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.isDeposit
-                  ? "Successfully deposited \$${_amountController.text}"
-                  : "Successfully withdrew \$${_amountController.text}",
-            ),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        );
-        Navigator.pop(context);
-      }
+      print('${widget.isDeposit ? 'Deposit' : 'Withdraw'} completed successfully');
     } on FormatException {
+      print('FormatException occurred');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please enter a valid number')),
         );
       }
     } catch (e) {
+      print('Exception occurred: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}')),

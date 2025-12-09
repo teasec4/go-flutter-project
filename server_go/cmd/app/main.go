@@ -12,22 +12,21 @@ import (
 
 	"github.com/go-chi/chi"
 	chimiddleware "github.com/go-chi/chi/middleware"
+	"server/internal/config"
 	"server/internal/handler"
-	"server/internal/storage"
+	"server/internal/store"
 )
 
 // main initializes and starts the HTTP server with graceful shutdown support
 func main() {
+	// Load configuration from environment variables
+	cfg := config.Load()
+	
 	// Initialize SQLite database
-	db, err := storage.New("bank.db")
+	db, err := store.InitDB(cfg.DB.Path)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-
-	// Create repositories
-	accountRepo := storage.NewAccountRepository(db)
-	userRepo := storage.NewUserRepository(db)
-	tokenRepo := storage.NewTokenRepository(db)
 
 	// Create a new chi router for handling HTTP requests
 	r := chi.NewRouter()
@@ -35,16 +34,16 @@ func main() {
 	// Apply global middleware
 	r.Use(chimiddleware.StripSlashes)
 
-	// Register all routes with repositories
-	handler.Routes(r, accountRepo, userRepo, tokenRepo)
+	// Register all routes with database
+	handler.Routes(r, db)
 
 	// Configure the HTTP server
 	server := &http.Server{
-		Addr:           "192.168.5.10:8080", // "0.0.0.0:8080", // IPv4 IPv6
+		Addr:           cfg.Server.Addr,
 		Handler:        r,
-		ReadTimeout:    15 * time.Second,
-		WriteTimeout:   15 * time.Second,
-		IdleTimeout:    60 * time.Second,
+		ReadTimeout:    time.Duration(cfg.Server.ReadTimeout) * time.Second,
+		WriteTimeout:   time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		IdleTimeout:    time.Duration(cfg.Server.IdleTimeout) * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
@@ -54,7 +53,7 @@ func main() {
 
 	// Start server in a separate goroutine
 	go func() {
-		log.Println("API server started on port :8080")
+		log.Printf("API server started on %s\n", cfg.Server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}

@@ -21,9 +21,30 @@ class AccountRemoteDatasourceImpl implements AccountRemoteDatasource {
     if (token == null || token.isEmpty) {
       throw Exception('No auth token found');
     }
+    
+    // Extract userId from JWT token (payload is the second part)
+    String userId = '';
+    try {
+      final parts = token.split('.');
+      if (parts.length == 3) {
+        final payload = parts[1];
+        // Add padding if needed
+        final normalized = payload.replaceAll('-', '+').replaceAll('_', '/');
+        final paddingNeeded = (4 - (normalized.length % 4)) % 4;
+        final padded = normalized + ('=' * paddingNeeded);
+        
+        final decoded = utf8.decode(base64Decode(padded));
+        final Map<String, dynamic> decodedMap = jsonDecode(decoded);
+        userId = decodedMap['sub'] as String? ?? '';
+      }
+    } catch (e) {
+      developer.log('Failed to extract userId from token: $e');
+    }
+    
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
+      if (userId.isNotEmpty) 'X-User-ID': userId,
     };
   }
 

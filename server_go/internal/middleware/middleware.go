@@ -2,17 +2,14 @@
 package middleware
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"server/internal/auth"
+
 	chimiddleware "github.com/go-chi/chi/middleware"
-	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"server/internal/models"
-	"server/internal/storage"
 )
 
 // CORS middleware allows cross-origin requests from any origin
@@ -48,75 +45,42 @@ func Logging(next http.Handler) http.Handler {
 // StripSlashes is chi's built-in middleware that removes trailing slashes from request paths
 var StripSlashes = chimiddleware.StripSlashes
 
-// GenerateToken creates a token and saves it to database
-// Token format: "accountId:uuid"
-// Default expiration: 24 hours
-func GenerateToken(userID string, tokenRepo *storage.TokenRepository) (string, error) {
-	tokenUUID := uuid.New().String()
-	tokenValue := fmt.Sprintf("%s:%s", userID, tokenUUID)
-	
-	token := &models.Token{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		Token:     tokenValue,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
-	
-	err := tokenRepo.CreateToken(token)
-	if err != nil {
-		return "", err
-	}
-	
-	log.Printf("Generated token for user %s", userID)
-	return tokenValue, nil
+// sendUnauthorized is a helper that sends standard unauthorized response
+func sendUnauthorized(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Write([]byte(`{"error":"` + message + `"}`))
 }
 
-// Auth verifies that requests contain a valid authorization token from database
+// Auth middleware verifies JWT tokens without database lookup (stateless)
 // Token is expected in "Authorization: Bearer <token>" header
-// Middleware also fetches and validates the associated account
-func AuthWithTokenRepo(tokenRepo *storage.TokenRepository) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get authorization header
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				w.Write([]byte(`{"error":"missing authorization header"}`))
-				return
-			}
+// Extracted userID is passed via X-User-ID header to handlers
+func Auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			sendUnauthorized(w, "missing authorization header")
+			return
+		}
 
-			// Extract token from "Bearer <token>" format
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				w.Write([]byte(`{"error":"invalid authorization format"}`))
-				return
-			}
+		// Extract token from "Bearer <token>" format
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			sendUnauthorized(w, "invalid authorization format")
+			return
+		}
 
-			tokenValue := parts[1]
-			
-			// Check if token exists in database and not expired
-			token, err := tokenRepo.GetTokenByValue(tokenValue)
-			if err != nil {
-				if err == gorm.ErrRecordNotFound {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-					w.Write([]byte(`{"error":"invalid or expired token"}`))
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"error":"database error"}`))
-				return
-			}
+		// Verify JWT token (no database lookup required)
+		claims, err := auth.VerifyJWT(parts[1])
+		if err != nil {
+			sendUnauthorized(w, "token expired or invalid, please login again")
+			return
+		}
 
-			log.Printf("Authorized request for user: %s", token.UserID)
-			
-			// Add UserID to request header for handlers to use
-			r.Header.Set("X-User-ID", token.UserID)
-			next.ServeHTTP(w, r)
-		})
-	}
+		log.Printf("Authorized request for user: %s", claims.UserID)
+
+		// Add UserID to request header for handlers to use
+		r.Header.Set("X-User-ID", claims.UserID)
+		next.ServeHTTP(w, r)
+	})
 }

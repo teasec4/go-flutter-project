@@ -1,10 +1,17 @@
 package models
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+// Error definitions for account operations
+var (
+	ErrInvalidAmount       = errors.New("amount must be greater than 0")
+	ErrInsufficientBalance = errors.New("insufficient balance")
 )
 
 type Account struct {
@@ -15,7 +22,7 @@ type Account struct {
 	UpdatedAt time.Time
 }
 
-// BeforeCreate автоматически генерирует ID для нового Account
+// BeforeCreate automatically generates a UUID for new Account records
 func (a *Account) BeforeCreate(tx *gorm.DB) error {
 	if a.ID == "" {
 		a.ID = uuid.New().String()

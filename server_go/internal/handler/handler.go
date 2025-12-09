@@ -2,66 +2,55 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
-	"gorm.io/gorm"
 	"net/http"
+	"server/internal/auth"
 	"server/internal/middleware"
 	"server/internal/models"
-	"server/internal/storage"
+	"server/internal/store"
+
 	"github.com/go-chi/chi"
+	"gorm.io/gorm"
 )
 
 // Routes registers all account-related API routes
-func Routes(r *chi.Mux, accountRepo *storage.AccountRepository, userRepo *storage.UserRepository, tokenRepo *storage.TokenRepository) {
+func Routes(r *chi.Mux, db *store.DB) {
 	// Apply CORS middleware globally
 	r.Use(middleware.CORS)
 	
 	// Login route (no auth required)
-	r.Post("/login", login(userRepo, tokenRepo))
-	r.Post("/register", register(userRepo, accountRepo))
+	r.Post("/login", login(db))
+	r.Post("/register", register(db))
 
 	r.Route("/account", func(router chi.Router) {
 		// Apply auth middleware to all /account routes
-		router.Use(middleware.AuthWithTokenRepo(tokenRepo))
+		router.Use(middleware.Auth)
 		// Apply logging middleware to all /account routes
 		router.Use(middleware.Logging)
-		router.Get("/", getBalance(accountRepo))
-		router.Post("/deposit", deposit(accountRepo))
-		router.Post("/withdraw", withdraw(accountRepo))
+		router.Get("/", getBalance(db))
+		router.Post("/deposit", deposit(db))
+		router.Post("/withdraw", withdraw(db))
 	})
 }
 
 // ============= Handlers =============
 
 // getBalance handles GET /account
-// Retrieves the current balance of the authenticated user's account
-func getBalance(accountRepo *storage.AccountRepository) http.HandlerFunc {
+func getBalance(db *store.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		// Get userID from header (set by auth middleware)
 		userID := r.Header.Get("X-User-ID")
-		if userID == "" {
-			sendError(w, http.StatusUnauthorized, "missing user information")
-			return
-		}
-
-		// Retrieve account from database by user ID
-		accounts, err := accountRepo.GetAccountsByUserID(ctx, userID)
+		account, err := getAccountForUser(r.Context(), db, userID)
 		if err != nil {
-			sendError(w, http.StatusInternalServerError, "database error")
+			if err == gorm.ErrRecordNotFound {
+				sendError(w, http.StatusNotFound, "account not found")
+			} else {
+				sendError(w, http.StatusInternalServerError, "database error")
+			}
 			return
 		}
 
-		if len(accounts) == 0 {
-			sendError(w, http.StatusNotFound, "account not found")
-			return
-		}
-
-		account := accounts[0] // User has exactly one account
-		// Write successful response with current balance
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(balanceResponse{
+		sendSuccess(w, http.StatusOK, balanceResponse{
 			AccountId: account.ID,
 			Balance:   account.GetBalance(),
 		})
@@ -69,11 +58,8 @@ func getBalance(accountRepo *storage.AccountRepository) http.HandlerFunc {
 }
 
 // deposit handles POST /account/deposit
-// Deposits funds into the authenticated user's account
-func deposit(accountRepo *storage.AccountRepository) http.HandlerFunc {
+func deposit(db *store.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		// Parse incoming JSON request body
 		var req struct {
 			Amount int `json:"amount"`
 		}
@@ -82,43 +68,28 @@ func deposit(accountRepo *storage.AccountRepository) http.HandlerFunc {
 			return
 		}
 
-		// Get userID from header (set by auth middleware)
 		userID := r.Header.Get("X-User-ID")
-		if userID == "" {
-			sendError(w, http.StatusUnauthorized, "missing user information")
-			return
-		}
-
-		// Lookup account in database by user ID
-		accounts, err := accountRepo.GetAccountsByUserID(ctx, userID)
+		account, err := getAccountForUser(r.Context(), db, userID)
 		if err != nil {
-			sendError(w, http.StatusInternalServerError, "database error")
+			if err == gorm.ErrRecordNotFound {
+				sendError(w, http.StatusNotFound, "account not found")
+			} else {
+				sendError(w, http.StatusInternalServerError, "database error")
+			}
 			return
 		}
 
-		if len(accounts) == 0 {
-			sendError(w, http.StatusNotFound, "account not found")
-			return
-		}
-
-		account := accounts[0] // User has exactly one account
-
-		// Execute deposit operation (validates amount)
 		if err := account.Deposit(req.Amount); err != nil {
 			sendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		// Save updated balance to database
-		if err := accountRepo.UpdateBalance(ctx, account.ID, account.GetBalance()); err != nil {
+		if err := db.UpdateBalance(r.Context(), account.ID, account.GetBalance()); err != nil {
 			sendError(w, http.StatusInternalServerError, "failed to update balance")
 			return
 		}
 
-		// Write successful response with updated balance
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(depositResponse{
+		sendSuccess(w, http.StatusOK, depositResponse{
 			AccountId: account.ID,
 			Balance:   account.GetBalance(),
 		})
@@ -126,11 +97,8 @@ func deposit(accountRepo *storage.AccountRepository) http.HandlerFunc {
 }
 
 // withdraw handles POST /account/withdraw
-// Withdraws funds from the authenticated user's account
-func withdraw(accountRepo *storage.AccountRepository) http.HandlerFunc {
+func withdraw(db *store.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		// Parse incoming JSON request body
 		var req struct {
 			Amount int `json:"amount"`
 		}
@@ -139,59 +107,62 @@ func withdraw(accountRepo *storage.AccountRepository) http.HandlerFunc {
 			return
 		}
 
-		// Get userID from header (set by auth middleware)
 		userID := r.Header.Get("X-User-ID")
-		if userID == "" {
-			sendError(w, http.StatusUnauthorized, "missing user information")
-			return
-		}
-
-		// Lookup account in database by user ID
-		accounts, err := accountRepo.GetAccountsByUserID(ctx, userID)
+		account, err := getAccountForUser(r.Context(), db, userID)
 		if err != nil {
-			sendError(w, http.StatusInternalServerError, "database error")
+			if err == gorm.ErrRecordNotFound {
+				sendError(w, http.StatusNotFound, "account not found")
+			} else {
+				sendError(w, http.StatusInternalServerError, "database error")
+			}
 			return
 		}
 
-		if len(accounts) == 0 {
-			sendError(w, http.StatusNotFound, "account not found")
-			return
-		}
-
-		account := accounts[0] // User has exactly one account
-
-		// Execute withdrawal operation
 		if err := account.Withdraw(req.Amount); err != nil {
 			sendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		// Save updated balance to database
-		if err := accountRepo.UpdateBalance(ctx, account.ID, account.GetBalance()); err != nil {
+		if err := db.UpdateBalance(r.Context(), account.ID, account.GetBalance()); err != nil {
 			sendError(w, http.StatusInternalServerError, "failed to update balance")
 			return
 		}
 
-		// Write successful response with updated balance
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(withdrawResponse{
+		sendSuccess(w, http.StatusOK, withdrawResponse{
 			AccountId: account.ID,
 			Balance:   account.GetBalance(),
 		})
 	}
 }
 
-// sendError is a helper function to send error responses in JSON format
+// sendError sends an error response in JSON format
 func sendError(w http.ResponseWriter, statusCode int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(errorResponse{Error: message})
 }
 
+// sendSuccess sends a successful response in JSON format
+func sendSuccess(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(data)
+}
+
+// getAccountForUser retrieves the account for an authenticated user
+func getAccountForUser(ctx context.Context, db *store.DB, userID string) (*models.Account, error) {
+	accounts, err := db.GetAccountsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(accounts) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &accounts[0], nil
+}
+
 // register handles POST /register
-// Creates a new user with userId and hashed password, and creates an associated account
-func register(userRepo *storage.UserRepository, accountRepo *storage.AccountRepository) http.HandlerFunc {
+func register(db *store.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse incoming JSON request body
 		var req registerRequest
@@ -206,10 +177,8 @@ func register(userRepo *storage.UserRepository, accountRepo *storage.AccountRepo
 			return
 		}
 
-		// Check if user already exists
-		_, err := userRepo.GetUserByID(req.UserId)
+		_, err := db.GetUserByID(req.UserId)
 		if err == nil {
-			// User exists
 			sendError(w, http.StatusBadRequest, "user already exists")
 			return
 		}
@@ -218,38 +187,38 @@ func register(userRepo *storage.UserRepository, accountRepo *storage.AccountRepo
 			return
 		}
 
-		// Hash password
 		hashedPassword, err := models.HashPassword(req.Password)
 		if err != nil {
 			sendError(w, http.StatusInternalServerError, "failed to process password")
 			return
 		}
 
-		// Create user
-		user := &models.User{
-			ID:       req.UserId,
-			Password: hashedPassword,
-		}
+		// Use transaction to ensure atomicity: both User and Account created together
+		err = db.WithTx(func(txDB *store.DB) error {
+			user := &models.User{
+				ID:       req.UserId,
+				Password: hashedPassword,
+			}
+			if err := txDB.CreateUser(user); err != nil {
+				return err
+			}
 
-		if err := userRepo.CreateUser(user); err != nil {
-			sendError(w, http.StatusInternalServerError, "failed to create user")
+			account := &models.Account{
+				UserID:  req.UserId,
+				Balance: 0,
+			}
+			if err := txDB.CreateAccount(account); err != nil {
+				return err
+			}
+
+			return nil
+		})
+		if err != nil {
+			sendError(w, http.StatusInternalServerError, "failed to create user and account")
 			return
 		}
 
-		// Create associated account
-		account := &models.Account{
-			UserID:  req.UserId,
-			Balance: 0,
-		}
-
-		if err := accountRepo.CreateAccount(account); err != nil {
-			sendError(w, http.StatusInternalServerError, "failed to create account")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(registerResponse{
+		sendSuccess(w, http.StatusCreated, registerResponse{
 			UserId:  req.UserId,
 			Message: "user registered successfully",
 		})
@@ -257,8 +226,8 @@ func register(userRepo *storage.UserRepository, accountRepo *storage.AccountRepo
 }
 
 // login handles POST /login
-// Authenticates user with userId and password, returns a token
-func login(userRepo *storage.UserRepository, tokenRepo *storage.TokenRepository) http.HandlerFunc {
+// Authenticates user with userId and password, returns a JWT token
+func login(db *store.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse incoming JSON request body
 		var req loginRequest
@@ -268,7 +237,7 @@ func login(userRepo *storage.UserRepository, tokenRepo *storage.TokenRepository)
 		}
 
 		// Find user by ID
-		user, err := userRepo.GetUserByID(req.UserId)
+		user, err := db.GetUserByID(req.UserId)
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {
 				sendError(w, http.StatusUnauthorized, "invalid userId or password")
@@ -284,8 +253,8 @@ func login(userRepo *storage.UserRepository, tokenRepo *storage.TokenRepository)
 			return
 		}
 
-		// Generate and save token to database
-		token, err := middleware.GenerateToken(req.UserId, tokenRepo)
+		// Generate JWT token (no database storage required - stateless)
+		token, err := auth.GenerateJWT(req.UserId)
 		if err != nil {
 			sendError(w, http.StatusInternalServerError, "failed to generate token")
 			return
